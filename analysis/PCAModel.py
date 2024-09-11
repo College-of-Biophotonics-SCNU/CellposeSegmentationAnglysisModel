@@ -3,16 +3,20 @@
 1. PCA-1 维度使用明场维度的特征
 2. PCA-2 维度使用荧光维度的特征
 """
+import random
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 class PCAModel:
-    def __init__(self, experiment="", ED_features=[]):
+    def __init__(self, experiment="", ED_features=None, root="",
+                 FRET_hypothesis_feature=None, standard="", reduce_model=None):
         self.file_list = []
         self.BF_features = []
         self.FI_features = []
@@ -29,14 +33,26 @@ class PCAModel:
         # 实验批次名称
         self.experiment = experiment
         self.ED_features = ED_features
+        self.root = root
+        self.reduce_model = reduce_model
+        self.FRET_hypothesis_feature = FRET_hypothesis_feature
+        if standard == 'MinMaxScaler':
+            self.standard_name = 'MinMaxScaler'
+            self.standard = MinMaxScaler()
+        else:
+            self.standard_name = 'StandardScaler'
+            self.standard = StandardScaler()
 
     def start(self, BF_df_data_path, FI_df_data_path):
         self.pre_data_loader(BF_df_data_path, FI_df_data_path)
         self.standardization()
         self.merge_data()
-        if len(self.ED_features) == 0:
+        if self.ED_features is not None:
+            self.reduce_analysis_ED_BF_features()
+        elif self.FRET_hypothesis_feature is not None:
+            self.reduce_analysis_hypothesis_FI()
+        else:
             self.reduce_analysis_FI_BF_features()
-        self.reduce_analysis_ED_BF_features(self.ED_features)
 
     def pre_data_loader(self, BF_df_data, FI_df_data):
         """
@@ -76,12 +92,9 @@ class PCAModel:
         self.BF_features = BF_data_to_normalize.columns
         FI_data_to_normalize = self.FI_original_df_data.drop(columns=self.primary_keys)
         self.FI_features = FI_data_to_normalize.columns
-
-        # 创建归一化器对象
-        scaler = StandardScaler()
         # 对数据进行归一化
-        BF_normalized_data = scaler.fit_transform(BF_data_to_normalize)
-        FI_normalized_data = scaler.fit_transform(FI_data_to_normalize)
+        BF_normalized_data = self.standard.fit_transform(BF_data_to_normalize)
+        FI_normalized_data = self.standard.fit_transform(FI_data_to_normalize)
         # 将归一化后的数据与不需要归一化的列合并
         self.BF_df = pd.concat([self.BF_original_df_data[['ImageNumber', 'ObjectNumber', 'label']],
                                 pd.DataFrame(BF_normalized_data, columns=self.BF_features)], axis=1)
@@ -98,14 +111,18 @@ class PCAModel:
         self.labels = self.BF_FI_df['label']
         print("合并后的数据大小为", self.BF_FI_df.shape)
 
-    def reduce_analysis_FI_BF_features(self, is_need_reduce_separate=True):
+    def reduce_analysis_FI_BF_features(self):
         """
         降维分析操作
         :return:
         """
         # 分别进行降维 降维成为1维
-        pca_BF = PCA(n_components=1)
-        pca_FI = PCA(n_components=1)
+        if self.reduce_model == 'TSNE':
+            pca_BF = TSNE(n_components=1, init='pca', random_state=520)
+            pca_FI = TSNE(n_components=1, init='pca', random_state=520)
+        else:
+            pca_BF = PCA(n_components=1, random_state=520)
+            pca_FI = PCA(n_components=1, random_state=520)
         BF_transformed = pca_BF.fit_transform(self.BF_FI_df[[
             feature + self.BF_suffixes if feature not in self.BF_FI_df.columns else feature for feature in
             self.BF_features]])
@@ -113,9 +130,6 @@ class PCAModel:
             feature + self.FI_suffixes if feature not in self.BF_FI_df.columns else feature for feature in
             self.FI_features]])
         pca_point = np.hstack((BF_transformed.reshape(-1, 1), FI_transformed.reshape(-1, 1)))
-        print(BF_transformed[0])
-        print(FI_transformed[0])
-        print(pca_point[0])
         print("BF-FI特征降维后的点矩阵大小", pca_point.shape)
         # 绘制图像
         # 绘制散点图
@@ -128,17 +142,22 @@ class PCAModel:
             indices = np.where(self.labels == label)
             plt.scatter(pca_point[indices, 0], pca_point[indices, 1], c=[colors[i]], label=label)
         plt.legend(loc='upper right')
-        plt.savefig('../data/result/jpg/' + "pca_BF_FI_" + self.experiment + ".jpg", dpi=300)
+        plt.savefig(self.root + '/data/result/jpg/' + self.reduce_model + "_" + self.standard_name
+                    + "_BF_FI_" + self.experiment + ".jpg", dpi=300)
         plt.show()
 
-    def reduce_analysis_ED_BF_features(self, ED_features):
+    def reduce_analysis_ED_BF_features(self):
         """
         降维分析操作
         :return:
         """
         # 分别进行降维 降维成为1维
-        pca_BF = PCA(n_components=1)
-        pca_FI = PCA(n_components=1)
+        if self.reduce_model == 'TSNE':
+            pca_BF = TSNE(n_components=1, init='pca', random_state=520)
+            pca_FI = TSNE(n_components=1, init='pca', random_state=520)
+        else:
+            pca_BF = PCA(n_components=1, random_state=520)
+            pca_FI = PCA(n_components=1, random_state=520)
         BF_transformed = pca_BF.fit_transform(self.BF_FI_df[[feature + self.BF_suffixes
                                                              if feature not in self.BF_FI_df.columns
                                                              else feature for feature in self.BF_features]])
@@ -161,7 +180,47 @@ class PCAModel:
             indices = np.where(self.labels == label)
             plt.scatter(pca_point[indices, 0], pca_point[indices, 1], c=[colors[i]], label=label)
         plt.legend(loc='upper right')
-        plt.savefig('../data/result/jpg/' + "pca_BF_ED_mean_" + self.experiment + ".jpg", dpi=300)
+        plt.savefig(self.root + '/data/result/jpg/' + self.reduce_model + "_" + self.standard_name
+                    + "_BF_ED_mean_" + self.experiment + ".jpg", dpi=300)
+        plt.show()
+
+    def reduce_analysis_hypothesis_FI(self):
+        """
+        假设 FRET 所提取的特征明显的区分
+        :return:
+        """
+        # 分别进行降维 降维成为1维
+        if self.reduce_model == 'TSNE':
+            pca_BF = TSNE(n_components=1, init='pca', random_state=520)
+        else:
+            pca_BF = PCA(n_components=1, random_state=520)
+        BF_transformed = pca_BF.fit_transform(self.BF_FI_df[[feature + self.BF_suffixes
+                                                             if feature not in self.BF_FI_df.columns
+                                                             else feature for feature in self.BF_features]])
+        FRET_transformed = np.array(list(map(lambda x: self.FRET_hypothesis_feature[x], self.labels)), dtype=float)
+        for index, value in enumerate(FRET_transformed):
+            if value == 1:
+                FRET_transformed[index] = random.uniform(1, 2)
+            else:
+                FRET_transformed[index] = random.uniform(-2, -1)
+        FI_transformed = FRET_transformed
+        # 绘制散点图
+        unique_labels = np.unique(self.labels)
+        colors = cm.rainbow(np.linspace(0, 1, len(unique_labels)))
+        plt.xlabel('BF features reduce')  # 设置横坐标标签
+        plt.ylabel('FRET hypothesis features reduce')  # 设置纵坐标标签
+
+        for i, label in enumerate(unique_labels):
+            indices = np.where(self.labels == label)
+            plt.scatter(BF_transformed[indices], FI_transformed[indices],
+                        c=[colors[i]], label=label)
+        plt.savefig(self.root + '/data/result/jpg/' + self.reduce_model + "_" + self.standard_name
+                    + "_BF_hypothesis_FRET_" + self.experiment + ".jpg", dpi=300)
+        # 创建 DataFrame
+        df = pd.DataFrame({'x': BF_transformed.reshape(-1, ), 'y': FI_transformed, 'label': self.labels})
+
+        # 将数据保存到 Excel 文件
+        df.to_excel('data.xlsx', index=False)
         plt.show()
 
 

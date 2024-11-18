@@ -1,5 +1,6 @@
 """
 药效评估函数对于 xlsx 文件进行处理计算操作
+高师兄定义的药物评估函数
 """
 import random
 import pandas as pd

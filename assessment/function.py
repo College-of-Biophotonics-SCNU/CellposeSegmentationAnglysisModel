@@ -2,11 +2,9 @@
 药效评估函数对于 xlsx 文件进行处理计算操作
 高师兄定义的药物评估函数
 """
-import random
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sphinx.addnodes import index
 
 
 class EfficacyEvaluationModel:
@@ -147,7 +145,7 @@ class EfficacyEvaluationModel:
 
 
 if __name__ == "__main__":
-    xlsx_path = r'20240806_BF.xlsx'
-    treatment_root = r'D:\data\20240806'
+    xlsx_path = r'20240716_BF.xlsx'
+    treatment_root = r'D:\data\20240716'
     model = EfficacyEvaluationModel(treatment_root, xlsx_path)
     model.start()
